@@ -18,7 +18,7 @@ exports.registerUser = async (req, res) => {
             return res.status(400).json({ message: "Please complete email verification first" });
         }
 
-        if (!existingUser.isVerified) {
+        if (!existingUser.otpVerified) {
             return res.status(400).json({ message: "Please verify email first" });
         }
 
