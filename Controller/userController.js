@@ -24,7 +24,7 @@ exports.registerUser = async (req, res) => {
 
         //otp generation
         const hashedPassword = await bcrypt.hash(password, 10)
-        await User.findByIdAndUpdate(existingUser._id, { username, email, phone, password: hashedPassword,isVerified: true }, { new: true })
+        await User.findByIdAndUpdate(existingUser._id, { username, email, phone, password: hashedPassword, isVerified: true }, { new: true })
         res.status(201).json({ message: "User registered successfully" })
 
     } catch (error) {
@@ -35,6 +35,8 @@ exports.registerUser = async (req, res) => {
 //verify user 
 exports.sendSignupOTP = async (req, res) => {
     const { email } = req.body;
+    console.log("EMAIL_USER:", process.env.EMAIL_USER);
+    console.log("EMAIL_PASS:", process.env.EMAIL_PASS?.length); // just length, not the value
 
     try {
         console.log(email);
@@ -46,7 +48,7 @@ exports.sendSignupOTP = async (req, res) => {
         }
         if (
             (existingUser?.otpLastSentAt) &&
-          (  Date.now() - existingUser.otpLastSentAt ) < 30 * 1000
+            (Date.now() - existingUser.otpLastSentAt) < 30 * 1000
         ) {
             return res.status(429).json({
                 message: "Please wait 30 seconds before requesting OTP again"
@@ -80,7 +82,7 @@ exports.verifySignupOTP = async (req, res) => {
     const { email, otp } = req.body;
 
     try {
-        
+
         if (!email || !otp) {
             return res.status(400).json({ message: "Email and OTP are required" });
         }
@@ -91,12 +93,12 @@ exports.verifySignupOTP = async (req, res) => {
             return res.status(400).json({ message: "User not found" });
         }
 
-        
+
         if (user.isVerified) {
             return res.status(400).json({ message: "User already verified" });
         }
 
-    
+
         if (!user.otp || !user.otpExpiry) {
             return res.status(400).json({ message: "OTP not found or already used" });
         }
@@ -149,7 +151,7 @@ exports.loginUsingPassword = async (req, res) => {
     const { email, phone, password } = req.body
 
     try {
-        const existingUser = await User.findOne({ $or: [{ email }, { phone }] })
+        const existingUser = await User.findOne({ email });
         if (!existingUser) {
             return res.status(400).json({ message: "User not found" });
         }
@@ -361,16 +363,61 @@ exports.User = async (req, res) => {
     try {
         const user = await User.findOne({ email })
         if (user && user.isVerified) {
-            res.status(200).json({ message: "User found", user  })
-            
+            res.status(200).json({ message: "User found", user })
+
         }
-        else{
+        else {
             return res.status(400).json({ message: "User not found" })
         }
-        
+
     } catch (error) {
         res.status(500).json({ message: "Internal server error", error })
     }
 }
 
 
+const admin = require('../config/firebaseAdmin');
+
+exports.googleLogin = async (req, res) => {
+    const { token } = req.body;
+
+    try {
+        if (!token) {
+            return res.status(400).json({ message: "Token missing" });
+        }
+
+
+        const decoded = await admin.auth().verifyIdToken(token);
+
+        const { name, email, picture, uid } = decoded;
+
+        let user = await User.findOne({ email });
+
+        if (!user) {
+
+            user = await User.create({
+                username: name,
+                email,
+                profile: picture,
+                googleId: uid,
+                isVerified: true
+            });
+        }
+
+        const appToken = jwt.sign(
+            { id: user._id },
+            process.env.JWT_SECRET,
+            { expiresIn: "7d" }
+        );
+
+        res.status(200).json({
+            message: "Google login successful",
+            token: appToken,
+            user
+        });
+
+    } catch (error) {
+        console.error("Google Login Error:", error);
+        res.status(401).json({ message: "Invalid Google token" });
+    }
+};
