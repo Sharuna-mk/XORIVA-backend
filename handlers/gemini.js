@@ -25,7 +25,8 @@ Tone: Friendly, concise, helpful. Never robotic.
 
 async function geminiReply(message) {
   try {
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    
+  const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
 
     const result = await model.generateContent({
       contents: [{ role: "user", parts: [{ text: message }] }],
@@ -40,5 +41,4 @@ async function geminiReply(message) {
     throw new Error("Gemini failed");
   }
 }
-
 module.exports = { geminiReply };
