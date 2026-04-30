@@ -9,6 +9,7 @@ const wishlistController = require('../Controller/wishlistController')
 const addressController = require('../Controller/addressController')
 const cartController = require("../Controller/cartController");
 const orderController = require("../Controller/orderController");
+const { chatController } = require('../Controller/chatController');
 
 // Auth / OTP
 router.post('/api/send-signup-otp', rateLimiter, userController.sendSignupOTP);
@@ -76,5 +77,6 @@ router.post("/api/order/fail", jwtMiddleware, orderController.failPayment);
 
 router.get("/api/orders", jwtMiddleware, orderController.allOrder);
 
+router.post('/api/chat', chatController);
 
 module.exports = router;
