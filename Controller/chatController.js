@@ -1,7 +1,7 @@
 const { manualReply } = require('../handlers/manual');
 const { geminiReply } = require('../handlers/gemini');
 
-const chatController = async (req, res) => {
+exports.chatController = async (req, res) => {
   const { message } = req.body;
 
   if (!message || message.trim() === "") {
@@ -25,5 +25,3 @@ const chatController = async (req, res) => {
     return res.status(500).json({ reply: "Something went wrong. Please try again." });
   }
 };
-
-module.exports = { chatController };

@@ -2,9 +2,7 @@ const Product = require("../Model/productModel");
 
 exports.getNewArrivals = async (req, res) => {
   try {
-    const products = await Product.find().sort({createdAt:-1}).limit(5)
-      .sort({ createdAt: -1 })
-      .limit(10)
+    const products = await Product.find().sort({createdAt:1}).limit(5)
       .select(
         "title brand thumbnail rating final_price_inr original_price_inr discountPercentage _id"
       );
@@ -18,9 +16,8 @@ exports.getNewArrivals = async (req, res) => {
 
 exports.getBestSellers = async (req, res) => {
   try {
-    const products = await Product.find().sort({rating:-1}).limit(5)
-      .sort({ rating: -1 })
-      .limit(10)
+    const products = await Product.find().sort({rating:-1})
+      .limit(5)
       .select(
         "title brand thumbnail rating final_price_inr original_price_inr discountPercentage _id"
       );

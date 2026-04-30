@@ -84,7 +84,6 @@ exports.addToCart = async (req, res) => {
   }
 };
 
-
 exports.getCart = async (req, res) => {
   try {
     const userId = req.payload.id;
@@ -180,8 +179,6 @@ exports.removeFromCart = async (req, res) => {
   }
 };
 
-
-
 exports.decreaseQuantity = async (req, res) => {
   try {
     const userId = req.payload.id;
@@ -242,13 +239,10 @@ exports.clearCart = async (req, res) => {
     }
 
     cart.items = [];
-
     await cart.save();
 
-    res.status(200).json({
-      message: "Cart cleared successfully",
-      items: [],
-    });
+    res.status(200).json({ message: "Cart cleared" });
+
   } catch (error) {
     res.status(500).json({
       message: "Clear cart failed",
