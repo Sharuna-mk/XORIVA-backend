@@ -12,71 +12,49 @@ const orderController = require("../Controller/orderController");
 const { chatController } = require('../Controller/chatController');
 
 // Auth / OTP
-router.post('/api/send-signup-otp', rateLimiter, userController.sendSignupOTP);
-router.post('/api/verify-signup-otp', userController.verifySignupOTP);
+router.post('/send-signup-otp', rateLimiter, userController.sendSignupOTP);
+router.post('/verify-signup-otp', userController.verifySignupOTP);
+router.post('/register', userController.registerUser);
+router.post('/login-password', userController.loginUsingPassword);
+router.post('/generate-otp', rateLimiter, userController.otpGenerate);
+router.post('/login-otp', userController.loginUsingOtp);
+router.post('/google-login', userController.googleLogin);
+router.post('/user-list', userController.User);
+router.put('/user/:id', jwtMiddleware, userController.updateUser);
+router.delete('/user/:id', jwtMiddleware, userController.deleteUser);
 
-// Register
-router.post('/api/register', userController.registerUser);
+// Products
+router.get('/newArrivals', productController.getNewArrivals);
+router.get('/bestSeller', productController.getBestSellers);
+router.get('/all-product', productController.getAllProducts);
+router.get('/search', productController.searchProducts);
+router.get('/product/:id', productController.getProductById);
 
-// Login
-router.post('/api/login-password', userController.loginUsingPassword);
-router.post('/api/generate-otp', rateLimiter, userController.otpGenerate);
-router.post('/api/login-otp', userController.loginUsingOtp);
-router.post('/api/google-login', userController.googleLogin);
+// Wishlist
+router.get('/wishlist', jwtMiddleware, wishlistController.getWishlist);
+router.post('/wishlist/add/:id', jwtMiddleware, wishlistController.toggleWishlist);
+router.delete('/wishlist/remove/:id', jwtMiddleware, wishlistController.removeFromWishlist);
 
-//findUser
-router.post('/api/user-list', userController.User);
+// Address
+router.post('/address/create', jwtMiddleware, addressController.createAddress);
+router.get('/address', jwtMiddleware, addressController.getAddress);
+router.put('/address/update/:id', jwtMiddleware, addressController.editAddress);
+router.delete('/address/delete/:id', jwtMiddleware, addressController.deleteAddress);
 
-// User actions 
-router.put('/api/user/:id', jwtMiddleware, userController.updateUser);
-router.delete('/api/user/:id', jwtMiddleware, userController.deleteUser);
+// Cart
+router.get('/cart', jwtMiddleware, cartController.getCart);
+router.post('/cart/add', jwtMiddleware, cartController.addToCart);
+router.delete('/cart/decrease', jwtMiddleware, cartController.decreaseQuantity);
+router.delete('/cart/removeItem', jwtMiddleware, cartController.removeFromCart);
+router.delete('/cart/remove', jwtMiddleware, cartController.clearCart);
 
-//product
-router.get("/newArrivals", productController.getNewArrivals);   
-router.get("/bestSeller", productController.getBestSellers);    
- 
+// Orders
+router.post('/order/create', jwtMiddleware, orderController.createOrder);
+router.post('/order/confirm', jwtMiddleware, orderController.confirmPayment);
+router.post('/order/fail', jwtMiddleware, orderController.failPayment);
+router.get('/orders', jwtMiddleware, orderController.allOrder);
 
-router.get("/all-product", productController.getAllProducts);  
- 
-// Search
-router.get("/search", productController.searchProducts);        
- 
-router.get("/product/:id", productController.getProductById); 
-
-
-//wishlist
-router.get("/api/wishlist/",jwtMiddleware,wishlistController.getWishlist)
-router.post("/api/wishlist/add/:id",jwtMiddleware,wishlistController.toggleWishlist)
-router.delete("/api/wishlist/remove/:id",jwtMiddleware,wishlistController.removeFromWishlist)
-
-//address
-
-router.post('/api/address/create', jwtMiddleware, addressController.createAddress);
-router.get('/api/address', jwtMiddleware, addressController.getAddress);
-router.put('/api/address/update/:id', jwtMiddleware, addressController.editAddress);
-router.delete('/api/address/delete/:id', jwtMiddleware, addressController.deleteAddress);
-
-//cart 
-
-router.get("/api/cart", jwtMiddleware, cartController.getCart);
-
-router.post("/api/cart/add", jwtMiddleware, cartController.addToCart);
-
-router.delete("/api/cart/decrease", jwtMiddleware, cartController.decreaseQuantity);
-
-router.delete("/api/cart/removeItem", jwtMiddleware, cartController.removeFromCart);
-
-router.delete("/api/cart/remove", jwtMiddleware, cartController.clearCart);
-
-//order
-router.post("/api/order/create", jwtMiddleware, orderController.createOrder);
-
-router.post("/api/order/confirm", jwtMiddleware, orderController.confirmPayment);
-
-router.post("/api/order/fail", jwtMiddleware, orderController.failPayment);
-
-router.get("/api/orders", jwtMiddleware, orderController.allOrder);
-
-router.post('/api/chat', chatController);
+// Chat
+router.post('/chat', chatController);
 
 module.exports = router;

@@ -8,9 +8,20 @@ const app = express();
 const router = require('./Route/routes');
 
 require('./config/db');
-app.use(cors());
+const corsOptions = {
+  origin: [
+    "http://localhost:5173",         
+    "http://localhost:3000",        
+    "https://xoriva.vercel.app",            
+  ],
+  methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+  allowedHeaders: ["Content-Type", "Authorization"],
+  credentials: true,                 
+};
+
+app.use(cors(corsOptions));
 app.use(express.json());   
-app.use(router);
+app.use('/api', router);
 
 app.get('/', (req, res) => {
     res.send('Welcome to XORIVA');
