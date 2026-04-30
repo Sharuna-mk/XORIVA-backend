@@ -386,7 +386,6 @@ exports.googleLogin = async (req, res) => {
             return res.status(400).json({ message: "Token missing" });
         }
 
-
         const decoded = await admin.auth().verifyIdToken(token);
 
         const { name, email, picture, uid } = decoded;
@@ -394,7 +393,6 @@ exports.googleLogin = async (req, res) => {
         let user = await User.findOne({ email });
 
         if (!user) {
-
             user = await User.create({
                 username: name,
                 email,
