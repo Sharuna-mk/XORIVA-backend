@@ -31,7 +31,7 @@ exports.createOrder = async (req, res) => {
       }
 
       const size = item.size?.toUpperCase();
-      let stock = size ? product.sizeStock?.[size] : product.stock;
+      let stock = size ? product.sizeStock?.get(size) : product.stock;
 
       if (!stock || stock < item.quantity) {
         return res.status(400).json({
@@ -44,7 +44,7 @@ exports.createOrder = async (req, res) => {
       totalAmount += price * item.quantity;
 
       orderItems.push({
-        productId: product._id, 
+        productId: product._id,
         name: product.title,
         price,
         quantity: item.quantity
@@ -87,7 +87,7 @@ exports.allOrder = async (req, res) => {
     const userId = req.payload.id;
 
     const orders = await Order.find({ userId })
-      .populate("items.productId")   
+      .populate("items.productId")
       .sort({ createdAt: -1 });
 
     res.status(200).json(orders);
@@ -147,7 +147,7 @@ exports.failPayment = async (req, res) => {
     if (!order) return res.status(404).json({ message: "Order not found" });
 
     order.paymentStatus = "failed";
-    order.orderStatus   = "cancelled";
+    order.orderStatus = "cancelled";
     await order.save();
 
     res.json({ message: "Order marked as failed" });

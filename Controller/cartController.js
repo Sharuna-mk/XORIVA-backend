@@ -5,12 +5,16 @@ exports.addToCart = async (req, res) => {
   try {
     const userId = req.payload.id;
     const { productId, size } = req.body;
+    console.log(productId, size);
 
-    if (!productId || !size) {
-      return res.status(400).json({ message: "Missing fields" });
-    }
+
+    // if (!productId || !size) {
+    //   return res.status(400).json({ message: "Missing fields" });
+    // }
 
     const product = await Product.findById(productId);
+    console.log(product);
+
 
     if (!product) {
       return res.status(404).json({ message: "Product not found" });
@@ -22,7 +26,7 @@ exports.addToCart = async (req, res) => {
       return res.status(400).json({ message: "Invalid size" });
     }
 
-    const stock = product.sizeStock?.[normalizedSize] || 0;
+    const stock = product.sizeStock?.get(normalizedSize) || 0;
 
     if (stock <= 0) {
       return res.status(400).json({ message: "Out of stock" });
@@ -106,7 +110,7 @@ exports.getCart = async (req, res) => {
 
         const size = item.size.toUpperCase();
         const price = product.final_price_inr || 0;
-        const stock = product.sizeStock?.[size] || 0;
+        const stock = product.sizeStock?.get(size) || 0;
 
         const quantity = Math.min(item.quantity, stock);
 
