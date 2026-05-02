@@ -68,6 +68,8 @@
 
 
 const nodemailer = require('nodemailer');
+const dns = require('dns');
+dns.setDefaultResultOrder('ipv4first');
 
 if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
   console.error('[EMAIL] ❌ EMAIL_USER or EMAIL_PASS is not set');
