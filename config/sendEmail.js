@@ -91,21 +91,25 @@
 //   }
 // }
 
-const Brevo = require('@getbrevo/brevo');
+const nodemailer = require('nodemailer');
 
-const client = Brevo.ApiClient.instance;
-client.authentications['api-key'].apiKey = process.env.BREVO_API_KEY;
-
-const apiInstance = new Brevo.TransactionalEmailsApi();
+const transporter = nodemailer.createTransport({
+  host: 'smtp-relay.brevo.com',
+  port: 587,
+  secure: false,
+  auth: {
+    user: process.env.EMAIL_USER,  
+    pass: process.env.BREVO_SMTP_PASS,  
+  }
+});
 
 exports.sendEmail = async (email, otp) => {
   try {
-    const sendSmtpEmail = new Brevo.SendSmtpEmail();
-
-    sendSmtpEmail.sender = { name: 'Xoriva', email: process.env.EMAIL_USER };
-    sendSmtpEmail.to = [{ email }];
-    sendSmtpEmail.subject = 'Your OTP Code';
-    sendSmtpEmail.htmlContent = `
+    await transporter.sendMail({
+      from: `"Xoriva" <${process.env.EMAIL_USER}>`,
+      to: email,
+      subject: 'Your OTP Code',
+      html: `
 <!DOCTYPE html>
 <html>
 <body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
@@ -148,9 +152,8 @@ exports.sendEmail = async (email, otp) => {
   </table>
 </body>
 </html>
-    `;
-
-    await apiInstance.sendTransacEmail(sendSmtpEmail);
+      `
+    });
     console.log('Email sent successfully');
   } catch (error) {
     console.error('Error sending email:', error);
