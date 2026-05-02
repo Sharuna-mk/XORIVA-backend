@@ -198,32 +198,61 @@
 
 
 const brevo = require('@getbrevo/brevo');
+const https = require('https');
+
 
 exports.sendEmail = async (to, otp) => {
-  if (!process.env.BREVO_API_KEY) {
-    throw new Error('[EMAIL] BREVO_API_KEY is not set');
+  const apiKey = process.env.BREVO_API_KEY;
+  
+  if (!apiKey) {
+    console.error('BREVO_API_KEY missing');
+    throw new Error('Email configuration error');
   }
 
-  let apiInstance = new brevo.TransactionalEmailsApi();
-  apiInstance.setApiKey(process.env.BREVO_API_KEY);
+  const postData = JSON.stringify({
+    sender: {
+      name: 'Xoriva',
+      email: 'xoriva0@gmail.com'  // Must be verified
+    },
+    to: [{
+      email: to
+    }],
+    subject: 'Your OTP Code – Xoriva',
+    htmlContent: buildEmailTemplate(otp)
+  });
 
-  let sendSmtpEmail = new brevo.SendSmtpEmail();
-  sendSmtpEmail.to = [{ email: to }];
-  sendSmtpEmail.sender = { 
-    email: 'xoriva0@gmail.com',  
-    name: 'Xoriva' 
+  const options = {
+    hostname: 'api.brevo.com',
+    path: '/v3/smtp/email',
+    method: 'POST',
+    headers: {
+      'Accept': 'application/json',
+      'api-key': apiKey,
+      'Content-Type': 'application/json',
+      'Content-Length': Buffer.byteLength(postData)
+    }
   };
-  sendSmtpEmail.subject = 'Your OTP Code – Xoriva';
-  sendSmtpEmail.htmlContent = buildEmailTemplate(otp);
 
-  try {
-    const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
-    console.log(`[EMAIL] ✓ Sent OTP to ${to} | Message ID: ${data.messageId}`);
-    return data;
-  } catch (error) {
-    console.error('[EMAIL] ❌ Failed to send:', error.response?.body || error.message);
-    throw new Error('Failed to send OTP email');
-  }
+  return new Promise((resolve, reject) => {
+    const req = https.request(options, (res) => {
+      let data = '';
+      res.on('data', (chunk) => data += chunk);
+      res.on('end', () => {
+        console.log(`[EMAIL] Response status: ${res.statusCode}`);
+        if (res.statusCode === 201) {
+          console.log('[EMAIL] ✓ OTP sent successfully');
+          resolve(JSON.parse(data));
+        } else {
+          console.error('[EMAIL] Failed:', data);
+          reject(new Error(`API returned ${res.statusCode}`));
+        }
+      });
+    });
+
+    req.on('error', reject);
+    req.write(postData);
+    req.end();
+  });
 };
 
 
