@@ -88,10 +88,10 @@
 // });
 
 
-// ✅ MUST be first — before any require
+
 const dns = require('dns');
 dns.setServers(['1.1.1.1'])
-dns.setDefaultResultOrder('ipv4first');
+
 
 require('dotenv').config();
 const express = require('express');
@@ -146,7 +146,8 @@ app.get('/test-email', async (req, res) => {
   }
 
   const transporter = nodemailer.createTransport({
-    host: 'smtp.gmail.com',
+
+    host: '173.194.43.108',
     port: 587,
     secure: false,
     requireTLS: true,
@@ -155,7 +156,10 @@ app.get('/test-email', async (req, res) => {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
     },
-    tls: { rejectUnauthorized: true },
+    tls: {
+      rejectUnauthorized: true,
+      servername: 'smtp.gmail.com', // ← required when using IP instead of hostname
+    },
   });
 
   try {
