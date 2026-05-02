@@ -197,89 +197,92 @@
 // }
 
 
-const { Resend } = require('resend');
+const brevo = require('@getbrevo/brevo');
 
 exports.sendEmail = async (to, otp) => {
-  if (!process.env.RESEND_API_KEY) {
-    throw new Error('[EMAIL] RESEND_API_KEY is not set');
+  if (!process.env.BREVO_API_KEY) {
+    throw new Error('[EMAIL] BREVO_API_KEY is not set');
   }
 
-  const resend = new Resend(process.env.RESEND_API_KEY);
+  let apiInstance = new brevo.TransactionalEmailsApi();
+  apiInstance.setApiKey(process.env.BREVO_API_KEY);
 
-  const { data, error } = await resend.emails.send({
-    from: 'Xoriva <onboarding@resend.dev>',
-    to,
-    subject: 'Your OTP Code – Xoriva',
-    html: buildEmailTemplate(otp),
-  });
+  let sendSmtpEmail = new brevo.SendSmtpEmail();
+  sendSmtpEmail.to = [{ email: to }];
+  sendSmtpEmail.sender = { 
+    email: 'xoriva0@gmail.com',  
+    name: 'Xoriva' 
+  };
+  sendSmtpEmail.subject = 'Your OTP Code – Xoriva';
+  sendSmtpEmail.htmlContent = buildEmailTemplate(otp);
 
-  if (error) {
-    console.error('[EMAIL] ❌ Resend error:', JSON.stringify(error));
-    throw new Error(error.message);
+  try {
+    const data = await apiInstance.sendTransacEmail(sendSmtpEmail);
+    console.log(`[EMAIL] ✓ Sent OTP to ${to} | Message ID: ${data.messageId}`);
+    return data;
+  } catch (error) {
+    console.error('[EMAIL] ❌ Failed to send:', error.response?.body || error.message);
+    throw new Error('Failed to send OTP email');
   }
-
-  console.log(`[EMAIL] ✓ Sent to ${to} | id: ${data.id}`);
-  return data;
 };
 
+
 function buildEmailTemplate(otp) {
-  return `
-<!DOCTYPE html>
-<html>
-<body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
-    <tr>
-      <td align="center">
-        <table width="480" cellpadding="0" cellspacing="0"
-          style="background:#fff;border-radius:16px;overflow:hidden;
-                 box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-          <tr>
-            <td style="background:#000;padding:32px;text-align:center;">
-              <h1 style="margin:0;color:#fff;font-size:28px;
-                         font-weight:800;letter-spacing:2px;">XORIVA</h1>
-              <p style="margin:6px 0 0;color:#999;font-size:13px;">
-                YOUR PREMIUM SHOPPING DESTINATION
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:40px 48px;text-align:center;">
-              <p style="margin:0 0 8px;font-size:16px;color:#555;">Hello there 👋</p>
-              <h2 style="margin:0 0 24px;font-size:22px;color:#111;font-weight:700;">
-                Your One-Time Password
-              </h2>
-              <div style="background:#f4f4f5;border-radius:12px;
-                          padding:28px;margin:0 0 28px;">
-                <p style="margin:0 0 10px;font-size:13px;color:#888;
-                           text-transform:uppercase;">OTP Code</p>
-                <p style="margin:0;font-size:42px;font-weight:800;
-                           letter-spacing:10px;color:#000;">${otp}</p>
-              </div>
-              <p style="margin:0 0 6px;font-size:14px;color:#555;">
-                Expires in <strong>5 minutes</strong>.
-              </p>
-              <p style="margin:0;font-size:13px;color:#999;">
-                Didn't request this? Ignore this email.
-              </p>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:0 48px;">
-              <div style="height:1px;background:#f0f0f0;"></div>
-            </td>
-          </tr>
-          <tr>
-            <td style="padding:24px 48px;text-align:center;">
-              <p style="margin:0;font-size:12px;color:#bbb;">
-                © ${new Date().getFullYear()} Xoriva. All rights reserved.
-              </p>
-            </td>
-          </tr>
-        </table>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>
-  `;
+  return `<!DOCTYPE html>
+  <html>
+  <body style="margin:0;padding:0;background:#f4f4f5;font-family:'Segoe UI',Arial,sans-serif;">
+    <table width="100%" cellpadding="0" cellspacing="0" style="padding:40px 0;">
+      <tr>
+        <td align="center">
+          <table width="480" cellpadding="0" cellspacing="0"
+            style="background:#fff;border-radius:16px;overflow:hidden;
+                   box-shadow:0 4px 24px rgba(0,0,0,0.08);">
+            <tr>
+              <td style="background:#000;padding:32px;text-align:center;">
+                <h1 style="margin:0;color:#fff;font-size:28px;
+                           font-weight:800;letter-spacing:2px;">XORIVA</h1>
+                <p style="margin:6px 0 0;color:#999;font-size:13px;">
+                  YOUR PREMIUM SHOPPING DESTINATION
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:40px 48px;text-align:center;">
+                <p style="margin:0 0 8px;font-size:16px;color:#555;">Hello there 👋</p>
+                <h2 style="margin:0 0 24px;font-size:22px;color:#111;font-weight:700;">
+                  Your One-Time Password
+                </h2>
+                <div style="background:#f4f4f5;border-radius:12px;
+                            padding:28px;margin:0 0 28px;">
+                  <p style="margin:0 0 10px;font-size:13px;color:#888;
+                             text-transform:uppercase;">OTP Code</p>
+                  <p style="margin:0;font-size:42px;font-weight:800;
+                             letter-spacing:10px;color:#000;">${otp}</p>
+                </div>
+                <p style="margin:0 0 6px;font-size:14px;color:#555;">
+                  Expires in <strong>5 minutes</strong>.
+                </p>
+                <p style="margin:0;font-size:13px;color:#999;">
+                  Didn't request this? Ignore this email.
+                </p>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:0 48px;">
+                <div style="height:1px;background:#f0f0f0;"></div>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:24px 48px;text-align:center;">
+                <p style="margin:0;font-size:12px;color:#bbb;">
+                  © ${new Date().getFullYear()} Xoriva. All rights reserved.
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+  </html>`;
 }
