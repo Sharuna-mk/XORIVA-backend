@@ -216,7 +216,7 @@ exports.otpGenerate = async (req, res) => {
             loginOtpExpiry: Date.now() + 5 * 60 * 1000,
             otpLastSentAt: Date.now()
         });
-        res.status(200).json({ message: "OTP sent", user });
+        res.status(200).json({ message: "OTP sent" });
 
         sendEmail(email, otp).catch(err => {
             console.error("Email failed:", err);
