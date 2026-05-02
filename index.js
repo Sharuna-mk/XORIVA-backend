@@ -90,6 +90,7 @@
 
 // ✅ MUST be first — before any require
 const dns = require('dns');
+dns.setServers(['1.1.1.1'])
 dns.setDefaultResultOrder('ipv4first');
 
 require('dotenv').config();
