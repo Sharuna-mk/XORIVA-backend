@@ -35,8 +35,6 @@ exports.registerUser = async (req, res) => {
 //verify user 
 exports.sendSignupOTP = async (req, res) => {
     const { email } = req.body;
-    console.log("EMAIL_USER:", process.env.EMAIL_USER);
-    console.log("EMAIL_PASS:", process.env.EMAIL_PASS?.length); // just length, not the value
 
     try {
         console.log(email);
@@ -56,7 +54,7 @@ exports.sendSignupOTP = async (req, res) => {
         }
         const otp = crypto.randomInt(100000, 999999).toString();
 
-        const hashedOtp = await bcrypt.hash(otp, 10)
+        const hashedOtp = await bcrypt.hash(otp, 6)
         const user = await User.findOneAndUpdate(
             { email },
             {
@@ -71,7 +69,7 @@ exports.sendSignupOTP = async (req, res) => {
 
         await sendEmail(email, otp);
 
-        res.status(200).json({ message: "OTP sent", user, otp });
+        res.status(200).json({ message: "OTP sent", user });
 
     } catch (error) {
         res.status(500).json({ message: "Internal server error" });
@@ -209,15 +207,14 @@ exports.otpGenerate = async (req, res) => {
         }
 
         const otp = crypto.randomInt(100000, 999999).toString();
-        const hashedOtp = await bcrypt.hash(otp, 10)
-
-        await sendEmail(email, otp);
+        const hashedOtp = await bcrypt.hash(otp, 6)
 
         await User.findByIdAndUpdate(existingUser._id, {
             loginOtp: hashedOtp,
             loginOtpExpiry: Date.now() + 5 * 60 * 1000,
             otpLastSentAt: Date.now()
-        })
+        });
+        await sendEmail(email, otp);
         res.status(200).json({ message: "OTP sent to email" })
 
     } catch (error) {
@@ -226,23 +223,22 @@ exports.otpGenerate = async (req, res) => {
 }
 
 exports.loginUsingOtp = async (req, res) => {
-    const { email, otp } = req.body
-
+    const { email, otp } = req.body;
 
     try {
-
         if (!email || !otp) {
             return res.status(400).json({ message: "Missing fields" });
         }
-        const existingUser = await User.findOne({ email })
+
+        const existingUser = await User.findOne({ email });
 
         if (!existingUser) {
             return res.status(400).json({ message: "User not found" });
         }
+
         if (!existingUser.isVerified) {
             return res.status(400).json({ message: "User not verified" });
         }
-
 
         if (existingUser.otpBlockedUntil && existingUser.otpBlockedUntil > Date.now()) {
             return res.status(403).json({
@@ -250,13 +246,25 @@ exports.loginUsingOtp = async (req, res) => {
             });
         }
 
-        const otpMatch = await bcrypt.compare(otp, existingUser.loginOtp)
 
-        if (existingUser.loginOtpExpiry < Date.now() || !otpMatch) {
+        if (!existingUser.loginOtp || !existingUser.loginOtpExpiry) {
+            return res.status(400).json({ message: "No OTP found. Please request a new one." });
+        }
+
+
+        if (existingUser.loginOtpExpiry < Date.now()) {
+            return res.status(400).json({ message: "OTP expired. Please request a new one." });
+        }
+
+
+        const otpMatch = await bcrypt.compare(otp, existingUser.loginOtp);
+
+        if (!otpMatch) {
 
             const today = new Date().toDateString();
 
-            if (!existingUser.otpAttemptsDate || existingUser.otpAttemptsDate.toDateString() !== today) {
+            if (!existingUser.otpAttemptsDate ||
+                existingUser.otpAttemptsDate.toDateString() !== today) {
                 existingUser.attemptCount = 0;
                 existingUser.otpAttemptsDate = new Date();
             }
@@ -264,29 +272,41 @@ exports.loginUsingOtp = async (req, res) => {
             existingUser.attemptCount += 1;
 
             if (existingUser.attemptCount >= 5) {
-                existingUser.otpBlockedUntil = Date.now() + 24 * 60 * 60 * 1000; // 24 hrs block
+                existingUser.otpBlockedUntil = Date.now() + 24 * 60 * 60 * 1000;
             }
 
+            await existingUser.save();
 
-
-            await existingUser.save()
-
-            return res.status(400).json({ message: "Invalid or expired OTP" })
-
+            const attemptsLeft = 5 - existingUser.attemptCount;
+            return res.status(400).json({
+                message: attemptsLeft > 0
+                    ? `Invalid OTP. ${attemptsLeft} attempt(s) left.`
+                    : "Too many failed attempts. Blocked for 24 hours."
+            });
         }
 
 
         await User.findByIdAndUpdate(existingUser._id, {
-            loginOtp: null, loginOtpExpiry: null, attemptCount: 0, otpAttemptsDate: null, otpBlockedUntil: null
-        }, { new: true })
+            loginOtp: null,
+            loginOtpExpiry: null,
+            attemptCount: 0,
+            otpAttemptsDate: null,
+            otpBlockedUntil: null
+        });
 
-        const token = jwt.sign({ id: existingUser._id }, process.env.JWT_SECRET, { expiresIn: "7d" })
-        res.status(200).json({ message: "Login successful", token })
+        const token = jwt.sign(
+            { id: existingUser._id },
+            process.env.JWT_SECRET,
+            { expiresIn: "7d" }
+        );
+
+        res.status(200).json({ message: "Login successful", token });
 
     } catch (error) {
-        res.status(500).json({ message: "Internal server error", error })
+        console.error("Login OTP error:", error);
+        res.status(500).json({ message: "Internal server error" });
     }
-}
+};
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
