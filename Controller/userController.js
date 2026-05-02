@@ -67,9 +67,11 @@ exports.sendSignupOTP = async (req, res) => {
             { upsert: true, returnDocument: 'after' }
         );
 
-        await sendEmail(email, otp);
-
         res.status(200).json({ message: "OTP sent", user });
+
+        sendEmail(email, otp).catch(err => {
+            console.error("Email failed:", err);
+        });
 
     } catch (error) {
         res.status(500).json({ message: "Internal server error" });
@@ -214,11 +216,15 @@ exports.otpGenerate = async (req, res) => {
             loginOtpExpiry: Date.now() + 5 * 60 * 1000,
             otpLastSentAt: Date.now()
         });
-        await sendEmail(email, otp);
-        res.status(200).json({ message: "OTP sent to email" })
+        res.status(200).json({ message: "OTP sent", user });
+
+        sendEmail(email, otp).catch(err => {
+            console.error("Email failed:", err);
+        });
 
     } catch (error) {
-        res.status(500).json({ message: "Internal server error", error })
+        console.error("otpGenerate error:", error.message);
+        res.status(500).json({ message: "Internal server error", error: error.message })
     }
 }
 
