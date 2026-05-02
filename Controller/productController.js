@@ -50,7 +50,7 @@ exports.getAllProducts = async (req, res) => {
     const products = await Product.find()
       .sort({ createdAt: -1 })
       .select(
-        "title brand thumbnail rating final_price_inr original_price_inr discountPercentage availabilityStatus _id"
+        "title brand thumbnail rating final_price_inr original_price_inr discountPercentage availabilityStatus _id gender"
       );
 
     return res.status(200).json({ products });
