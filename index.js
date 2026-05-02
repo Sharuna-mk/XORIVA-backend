@@ -10,21 +10,21 @@ const router = require('./Route/routes');
 require('./config/db');
 const corsOptions = {
   origin: [
-    "http://localhost:5173",         
-    "http://localhost:3000",        
-    "https://xoriva.vercel.app",            
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "https://xoriva.vercel.app",
   ],
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
-  credentials: true,                 
+  credentials: true,
 };
 
 app.use(cors(corsOptions));
-app.use(express.json());   
+app.use(express.json());
 app.use('/api', router);
 
 app.get('/', (req, res) => {
-    res.send('Hey!Welcome to XORIVA');
+  res.send('Hey!Welcome to XORIVA');
 });
 
 // In your main index.js or any router file — TEMPORARY
@@ -47,9 +47,13 @@ app.get('/test-email', async (req, res) => {
     port: 587,
     secure: false,
     requireTLS: true,
+    family: 4,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
+    },
+    tls: {
+      rejectUnauthorized: true,
     },
   });
 
@@ -76,9 +80,9 @@ app.get('/test-email', async (req, res) => {
   res.json(results);
 });
 
-const port = process.env.PORT ||  3000;     
-  
+const port = process.env.PORT || 3000;
+
 
 app.listen(port, () => {
-    console.log(`Server is running on port ${port}`);
+  console.log(`Server is running on port ${port}`);
 });
