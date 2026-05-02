@@ -73,13 +73,13 @@ if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
   console.error('[EMAIL] ❌ EMAIL_USER or EMAIL_PASS is not set');
 }
 
-// Fresh transporter every send — safe for Render's sleeping servers
+
 function createTransporter() {
   return nodemailer.createTransport({
     host: 'smtp.gmail.com',
-    port: 587,         // 465 is blocked on Render free tier
-    secure: false,     // 587 uses STARTTLS
-    requireTLS: true,  // enforce TLS upgrade
+    port: 587,
+    secure: false,
+    requireTLS: true,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASS,
@@ -87,6 +87,8 @@ function createTransporter() {
     tls: {
       rejectUnauthorized: true,
     },
+  
+    family: 4,
   });
 }
 
