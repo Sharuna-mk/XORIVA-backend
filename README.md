@@ -1,4 +1,4 @@
-# Xoriva — Backend API
+# Xoriva — Backend 
 
 Built with **Node.js**, **Express.js**, **MongoDB**, **JWT**, **Bcrypt**, **Stripe**, and **Google Gemini API**.
 
