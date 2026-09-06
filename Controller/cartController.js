@@ -20,13 +20,13 @@ exports.addToCart = async (req, res) => {
       return res.status(404).json({ message: "Product not found" });
     }
 
-    const normalizedSize = size.toUpperCase();
-
-    if (!product.sizes.includes(normalizedSize)) {
+    const normalizedSize = size ? size.toUpperCase() : "ONE_SIZE";
+    const hasSizes = product.sizes?.length > 0;
+    if (hasSizes && !product.sizes.includes(normalizedSize)) {
       return res.status(400).json({ message: "Invalid size" });
     }
 
-    const stock = product.sizeStock?.get(normalizedSize) || 0;
+    const stock = hasSizes ? (product.sizeStock?.get(normalizedSize) || 0) : product.stock;
 
     if (stock <= 0) {
       return res.status(400).json({ message: "Out of stock" });
@@ -49,7 +49,7 @@ exports.addToCart = async (req, res) => {
       const index = cart.items.findIndex(
         (item) =>
           item.product.toString() === productId &&
-          item.size.toUpperCase() === normalizedSize
+          (item.size || "ONE_SIZE").toUpperCase() === normalizedSize
       );
 
       if (index > -1) {
@@ -71,7 +71,7 @@ exports.addToCart = async (req, res) => {
 
     const updatedCart = await cart.populate({
       path: "items.product",
-      select: "title thumbnail final_price_inr sizeStock",
+      select: "title thumbnail final_price_inr sizeStock listingType",
     });
 
     res.status(200).json({
@@ -108,9 +108,9 @@ exports.getCart = async (req, res) => {
         const product = item.product;
         if (!product) return null;
 
-        const size = item.size.toUpperCase();
+        const size = (item.size || "ONE_SIZE").toUpperCase();
         const price = product.final_price_inr || 0;
-        const stock = product.sizeStock?.get(size) || 0;
+        const stock = size === "ONE_SIZE" ? product.stock : (product.sizeStock?.get(size) || 0);
 
         const quantity = Math.min(item.quantity, stock);
 
@@ -125,6 +125,7 @@ exports.getCart = async (req, res) => {
           size,
           quantity,
           stock,
+          listingType: product.listingType || "retail",
         };
       })
       .filter(Boolean);

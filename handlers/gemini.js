@@ -1,6 +1,8 @@
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
+const genAI = process.env.GEMINI_API_KEY
+  ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY)
+  : null;
 
 const systemPrompt = `
 You are Xoriva Assistant, a friendly and helpful customer support bot for Xoriva, an e-commerce store.
@@ -25,17 +27,18 @@ Tone: Friendly, concise, helpful. Never robotic.
 
 async function geminiReply(message) {
   try {
-    
-  const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    if (!genAI) throw new Error("GEMINI_API_KEY is not configured");
 
-    const result = await model.generateContent({
-      contents: [{ role: "user", parts: [{ text: message }] }],
-      systemInstruction: {
-        parts: [{ text: systemPrompt }]
-      }
+    const model = genAI.getGenerativeModel({
+      model: "gemini-1.5-flash",
+      systemInstruction: systemPrompt,
     });
 
-    return result.response.text();
+    const result = await model.generateContent(message);
+    const reply = result.response.text()?.trim();
+    if (!reply) throw new Error("Gemini returned an empty response");
+
+    return reply;
   } catch (error) {
     console.error("Gemini API error:", error.message);
     throw new Error("Gemini failed");

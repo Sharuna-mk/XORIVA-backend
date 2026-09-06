@@ -24,6 +24,33 @@ const productSchema = new mongoose.Schema(
     gender: { type: String, enum: ["men", "women", "unisex", "kids"] },
     tags: [{ type: String }],
 
+    listingType: {
+      type: String,
+      enum: ["retail", "thrift"],
+      default: "retail",
+      index: true,
+    },
+    sellerId: { type: mongoose.Schema.Types.ObjectId, ref: "User", index: true },
+    listingStatus: {
+      type: String,
+      enum: ["draft", "pending_review", "approved", "rejected", "sold", "withdrawn"],
+      default: "approved",
+      index: true,
+    },
+    condition: { type: String, enum: ["New", "Like New", "Good", "Used"] },
+    era: { type: String },
+    itemCategory: { type: String },
+    color: { type: String },
+    material: { type: String },
+    fit: { type: String },
+    pattern: { type: String },
+    measurements: {
+      chest: { type: String },
+      waist: { type: String },
+      length: { type: String },
+      inseam: { type: String },
+    },
+
     price: { type: Number },                        
     original_price_inr: { type: Number, required: true },
     final_price_inr: { type: Number, required: true },
@@ -46,7 +73,6 @@ const productSchema = new mongoose.Schema(
       default: "In Stock",
     },
 
-    material: { type: String },
     productCare: [{ type: String }],
 
     thumbnail: { type: String },
@@ -78,6 +104,7 @@ const productSchema = new mongoose.Schema(
 
 productSchema.index({ brand: 1 });
 productSchema.index({ category: 1 });
+productSchema.index({ listingType: 1, listingStatus: 1, createdAt: -1 });
 productSchema.index({ title: "text", description: "text", brand: "text" });
 
 module.exports= mongoose.model("Product", productSchema);

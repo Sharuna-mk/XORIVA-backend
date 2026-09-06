@@ -20,6 +20,16 @@ const userSchema = mongoose.Schema({
         default: "user",
         type: String
     },
+    payoutAccount: {
+        accountType: { type: String, enum: ["upi", "bank"] },
+        accountHolderName: { type: String, trim: true },
+        upiId: { type: String, trim: true },
+        bankName: { type: String, trim: true },
+        accountNumberLast4: { type: String, trim: true },
+        ifsc: { type: String, trim: true, uppercase: true },
+        status: { type: String, enum: ["pending", "verified", "blocked"], default: "pending" },
+        addedAt: { type: Date },
+    },
     isVerified: {
         type: Boolean,
         default: false

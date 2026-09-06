@@ -7,6 +7,7 @@ const orderItemSchema = new mongoose.Schema({
     required: true
   },
   name: String,
+  size: String,
   price: Number,
   quantity: Number
 });
@@ -30,18 +31,39 @@ const orderSchema = new mongoose.Schema(
     },
 
     totalAmount: Number,
+    subtotal: { type: Number, default: 0 },
+    thriftSubtotal: { type: Number, default: 0 },
+    platformFeePercent: { type: Number, default: 0 },
+    platformFee: { type: Number, default: 0 },
+    sellerPayoutAmount: { type: Number, default: 0 },
+    payoutStatus: {
+      type: String,
+      enum: ["not_applicable", "pending", "eligible", "paid", "failed"],
+      default: "not_applicable",
+    },
+    paymentMethod: { type: String, enum: ["online", "cod"], default: "online" },
 
     paymentStatus: {
       type: String,
-      enum: ["pending", "paid", "failed"],
+      enum: ["pending", "paid", "failed", "refunded"],
       default: "pending"
     },
 
     orderStatus: {
       type: String,
-      enum: ["created", "confirmed", "cancelled"],
+      enum: ["created", "confirmed", "shipped", "delivered", "cancelled", "returned"],
       default: "created"
     },
+
+    returnRequest: {
+      status: { type: String, enum: ["none", "requested", "approved", "rejected", "completed"], default: "none" },
+      reason: String,
+      requestedAt: Date,
+      resolvedAt: Date,
+      note: String,
+    },
+    cancelledAt: Date,
+    deliveredAt: Date,
 
     paymentIntentId: String
   },

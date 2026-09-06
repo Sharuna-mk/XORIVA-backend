@@ -4,6 +4,16 @@ const jwt = require('jsonwebtoken')
 const crypto = require('crypto');
 const { sendEmail } = require('../config/sendEmail');
 
+exports.getProfile = async (req, res) => {
+    try {
+        const user = await User.findById(req.payload.id).select('-password -otp -otpExpiry -loginOtp -loginOtpExpiry');
+        if (!user) return res.status(404).json({ message: 'User not found' });
+        return res.status(200).json({ user });
+    } catch (error) {
+        return res.status(500).json({ message: 'Failed to fetch profile' });
+    }
+};
+
 
 
 //register
@@ -443,5 +453,30 @@ exports.googleLogin = async (req, res) => {
     } catch (error) {
         console.error("Google Login Error:", error);
         res.status(401).json({ message: "Invalid Google token" });
+    }
+};
+
+exports.updatePayoutAccount = async (req, res) => {
+    try {
+        const { accountType, accountHolderName, upiId, bankName, accountNumber, ifsc } = req.body || {};
+        if (!accountHolderName?.trim()) return res.status(400).json({ message: "Account holder name is required" });
+        if (accountType === "upi" && !upiId?.trim()) return res.status(400).json({ message: "UPI ID is required" });
+        if (accountType === "bank" && (!bankName?.trim() || !accountNumber || !ifsc?.trim())) {
+            return res.status(400).json({ message: "Bank name, account number, and IFSC are required" });
+        }
+        const payoutAccount = {
+            accountType,
+            accountHolderName: accountHolderName.trim(),
+            upiId: accountType === "upi" ? upiId.trim() : undefined,
+            bankName: accountType === "bank" ? bankName.trim() : undefined,
+            accountNumberLast4: accountType === "bank" ? String(accountNumber).slice(-4) : undefined,
+            ifsc: accountType === "bank" ? ifsc.trim().toUpperCase() : undefined,
+            status: "pending",
+            addedAt: new Date(),
+        };
+        const user = await User.findByIdAndUpdate(req.payload.id, { payoutAccount }, { new: true }).select("payoutAccount");
+        return res.status(200).json({ message: "Payout details saved for verification", payoutAccount: user.payoutAccount });
+    } catch (error) {
+        return res.status(500).json({ message: "Failed to save payout details" });
     }
 };
