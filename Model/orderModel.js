@@ -32,6 +32,8 @@ const orderSchema = new mongoose.Schema(
 
     totalAmount: Number,
     subtotal: { type: Number, default: 0 },
+    discount: { type: Number, default: 0 },
+    couponCode: { type: String, default: "" },
     thriftSubtotal: { type: Number, default: 0 },
     platformFeePercent: { type: Number, default: 0 },
     platformFee: { type: Number, default: 0 },
@@ -51,9 +53,16 @@ const orderSchema = new mongoose.Schema(
 
     orderStatus: {
       type: String,
-      enum: ["created", "confirmed", "shipped", "delivered", "cancelled", "returned"],
-      default: "created"
+      enum: ["placed", "confirmed", "shipped", "out_for_delivery", "delivered", "cancelled", "returned"],
+      default: "placed"
     },
+
+    courierPartner: { type: String, default: "" },
+    trackingNumber: { type: String, default: "" },
+    trackingUrl: { type: String, default: "" },
+    sellerNotes: { type: String, default: "" },
+    confirmedAt: Date,
+    shippedAt: Date,
 
     returnRequest: {
       status: { type: String, enum: ["none", "requested", "approved", "rejected", "completed"], default: "none" },

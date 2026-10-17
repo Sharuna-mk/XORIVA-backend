@@ -6,7 +6,7 @@ const { sendEmail } = require('../config/sendEmail');
 
 exports.getProfile = async (req, res) => {
     try {
-        const user = await User.findById(req.payload.id).select('-password -otp -otpExpiry -loginOtp -loginOtpExpiry');
+        const user = await User.findById(req.payload.id).select('-password -otp -otpExpiry -loginOtp -loginOtpExpiry -passwordResetOtp -passwordResetOtpExpiry -passwordResetToken -passwordResetTokenExpiry -contactChangeOtp -contactChangeOtpExpiry -contactChangeOtpLastSentAt -contactChangeOtpAttempts -contactChangeOtpBlockedUntil -pendingContactEmail -pendingContactPhone');
         if (!user) return res.status(404).json({ message: 'User not found' });
         return res.status(200).json({ user });
     } catch (error) {
@@ -325,6 +325,153 @@ exports.loginUsingOtp = async (req, res) => {
 };
 
 
+exports.sendPasswordResetOTP = async (req, res) => {
+    const { email } = req.body;
+
+    if (!email) return res.status(400).json({ message: "Email is required" });
+
+    try {
+        const user = await User.findOne({ email, isVerified: true });
+        if (!user) return res.status(404).json({ message: "No verified account found with this email" });
+
+        if (user.passwordResetOtpBlockedUntil && user.passwordResetOtpBlockedUntil > Date.now()) {
+            return res.status(403).json({ message: "Too many failed attempts. Please try again later." });
+        }
+
+        if (user.passwordResetOtpLastSentAt && Date.now() - user.passwordResetOtpLastSentAt < 30 * 1000) {
+            return res.status(429).json({ message: "Please wait 30 seconds before requesting another OTP" });
+        }
+
+        const otp = crypto.randomInt(100000, 999999).toString();
+        const hashedOtp = await bcrypt.hash(otp, 6);
+        await User.findByIdAndUpdate(user._id, {
+            passwordResetOtp: hashedOtp,
+            passwordResetOtpExpiry: Date.now() + 5 * 60 * 1000,
+            passwordResetOtpLastSentAt: Date.now(),
+            passwordResetOtpAttempts: 0,
+            passwordResetToken: null,
+            passwordResetTokenExpiry: null
+        });
+
+        try {
+            await sendEmail(email, otp);
+        } catch (error) {
+            await User.findByIdAndUpdate(user._id, {
+                passwordResetOtp: null,
+                passwordResetOtpExpiry: null
+            });
+            throw error;
+        }
+
+        return res.status(200).json({ message: "Password reset OTP sent" });
+    } catch (error) {
+        console.error("Password reset OTP send error:", error);
+        return res.status(500).json({ message: "Failed to send password reset OTP" });
+    }
+};
+
+exports.verifyPasswordResetOTP = async (req, res) => {
+    const { email, otp } = req.body;
+
+    if (!email || !otp) return res.status(400).json({ message: "Email and OTP are required" });
+
+    try {
+        const user = await User.findOne({ email, isVerified: true });
+        if (!user) return res.status(404).json({ message: "User not found" });
+
+        if (user.passwordResetOtpBlockedUntil && user.passwordResetOtpBlockedUntil > Date.now()) {
+            return res.status(403).json({ message: "Too many failed attempts. Please try again later." });
+        }
+
+        if (!user.passwordResetOtp || !user.passwordResetOtpExpiry) {
+            return res.status(400).json({ message: "No reset OTP found. Please request a new one." });
+        }
+
+        if (user.passwordResetOtpExpiry < Date.now()) {
+            return res.status(400).json({ message: "OTP expired. Please request a new one." });
+        }
+
+        const otpMatches = await bcrypt.compare(String(otp), user.passwordResetOtp);
+        if (!otpMatches) {
+            const attempts = (user.passwordResetOtpAttempts || 0) + 1;
+            const update = { passwordResetOtpAttempts: attempts };
+            if (attempts >= 5) {
+                update.passwordResetOtpBlockedUntil = Date.now() + 24 * 60 * 60 * 1000;
+                update.passwordResetOtp = null;
+                update.passwordResetOtpExpiry = null;
+            }
+            await User.findByIdAndUpdate(user._id, update);
+            return res.status(400).json({
+                message: attempts >= 5
+                    ? "Too many failed attempts. Please try again later."
+                    : `Invalid OTP. ${5 - attempts} attempt(s) left.`
+            });
+        }
+
+        const resetToken = crypto.randomBytes(32).toString("hex");
+        await User.findByIdAndUpdate(user._id, {
+            passwordResetOtp: null,
+            passwordResetOtpExpiry: null,
+            passwordResetOtpAttempts: 0,
+            passwordResetOtpBlockedUntil: null,
+            passwordResetToken: crypto.createHash("sha256").update(resetToken).digest("hex"),
+            passwordResetTokenExpiry: Date.now() + 10 * 60 * 1000
+        });
+
+        return res.status(200).json({ message: "OTP verified", resetToken });
+    } catch (error) {
+        console.error("Password reset OTP verification error:", error);
+        return res.status(500).json({ message: "Failed to verify OTP" });
+    }
+};
+
+exports.resetPassword = async (req, res) => {
+    const { email, resetToken, password, confirmPassword } = req.body;
+
+    if (!email || !resetToken || !password || !confirmPassword) {
+        return res.status(400).json({ message: "All fields are required" });
+    }
+    if (password !== confirmPassword) {
+        return res.status(400).json({ message: "Passwords do not match" });
+    }
+    if (password.length < 6 || !/[A-Z]/.test(password) || !/[0-9]/.test(password)) {
+        return res.status(400).json({ message: "Password must be at least 6 characters and include an uppercase letter and a number" });
+    }
+
+    try {
+        const tokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+        const user = await User.findOne({
+            email,
+            isVerified: true,
+            passwordResetToken: tokenHash,
+            passwordResetTokenExpiry: { $gt: Date.now() }
+        });
+        if (!user) return res.status(400).json({ message: "Password reset session expired. Verify your OTP again." });
+
+        const hashedPassword = await bcrypt.hash(password, 10);
+        const result = await User.updateOne(
+            {
+                _id: user._id,
+                passwordResetToken: tokenHash,
+                passwordResetTokenExpiry: { $gt: Date.now() }
+            },
+            {
+                $set: { password: hashedPassword },
+                $unset: { passwordResetToken: 1, passwordResetTokenExpiry: 1 }
+            }
+        );
+        if (!result.modifiedCount) {
+            return res.status(400).json({ message: "Password reset session expired. Verify your OTP again." });
+        }
+
+        return res.status(200).json({ message: "Password reset successfully" });
+    } catch (error) {
+        console.error("Password reset error:", error);
+        return res.status(500).json({ message: "Failed to reset password" });
+    }
+};
+
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //Delete User
@@ -352,10 +499,185 @@ exports.deleteUser = async (req, res) => {
 
 //update User
 
+exports.sendContactChangeOTP = async (req, res) => {
+    const { email, phone } = req.body || {};
+
+    if (typeof email !== "string" || typeof phone !== "string") {
+        return res.status(400).json({ message: "Email and phone are required" });
+    }
+
+    try {
+        const user = await User.findById(req.payload.id);
+        if (!user) return res.status(404).json({ message: "User not found" });
+        if (!user.isVerified) return res.status(400).json({ message: "Please verify your account first" });
+
+        const nextEmail = email.trim().toLowerCase();
+        const nextPhone = phone.trim();
+        const emailChanged = nextEmail !== (user.email || "").toLowerCase();
+        const phoneChanged = nextPhone !== (user.phone || "");
+        if (!emailChanged && !phoneChanged) {
+            return res.status(400).json({ message: "No contact details were changed" });
+        }
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(nextEmail)) {
+            return res.status(400).json({ message: "Enter a valid email address" });
+        }
+        if (phoneChanged && nextPhone && !/^\d{10}$/.test(nextPhone)) {
+            return res.status(400).json({ message: "Enter a valid 10-digit mobile number" });
+        }
+        if (user.contactChangeOtpBlockedUntil && user.contactChangeOtpBlockedUntil > Date.now()) {
+            return res.status(403).json({ message: "Too many failed attempts. Please try again later." });
+        }
+        if (user.contactChangeOtpLastSentAt && Date.now() - user.contactChangeOtpLastSentAt < 30 * 1000) {
+            return res.status(429).json({ message: "Please wait 30 seconds before requesting another OTP" });
+        }
+
+        const conflictChecks = [];
+        if (emailChanged) conflictChecks.push({ email: nextEmail });
+        if (phoneChanged && nextPhone) conflictChecks.push({ phone: nextPhone });
+        if (conflictChecks.length) {
+            const conflict = await User.findOne({ $or: conflictChecks, _id: { $ne: user._id } });
+            if (conflict?.email === nextEmail) return res.status(409).json({ message: "Email already in use" });
+            if (conflict?.phone === nextPhone) return res.status(409).json({ message: "Phone number already in use" });
+        }
+
+        const otp = crypto.randomInt(100000, 999999).toString();
+        const hashedOtp = await bcrypt.hash(otp, 6);
+        await User.findByIdAndUpdate(user._id, {
+            contactChangeOtp: hashedOtp,
+            contactChangeOtpExpiry: Date.now() + 5 * 60 * 1000,
+            contactChangeOtpLastSentAt: Date.now(),
+            contactChangeOtpAttempts: 0,
+            pendingContactEmail: nextEmail,
+            pendingContactPhone: nextPhone
+        });
+
+        const destination = emailChanged ? nextEmail : user.email;
+        try {
+            await sendEmail(destination, otp);
+        } catch (error) {
+            await User.findByIdAndUpdate(user._id, {
+                contactChangeOtp: null,
+                contactChangeOtpExpiry: null,
+                pendingContactEmail: null,
+                pendingContactPhone: null
+            });
+            throw error;
+        }
+
+        return res.status(200).json({
+            message: "Verification OTP sent",
+            destination: emailChanged ? nextEmail : user.email
+        });
+    } catch (error) {
+        console.error("Contact change OTP error:", error);
+        return res.status(500).json({ message: "Failed to send verification OTP" });
+    }
+};
+
+exports.verifyContactChangeOTP = async (req, res) => {
+    const { otp } = req.body || {};
+    if (!otp) return res.status(400).json({ message: "OTP is required" });
+
+    try {
+        const user = await User.findById(req.payload.id);
+        if (!user) return res.status(404).json({ message: "User not found" });
+        if (user.contactChangeOtpBlockedUntil && user.contactChangeOtpBlockedUntil > Date.now()) {
+            return res.status(403).json({ message: "Too many failed attempts. Please try again later." });
+        }
+        if (!user.contactChangeOtp || !user.contactChangeOtpExpiry || !user.pendingContactEmail) {
+            return res.status(400).json({ message: "No pending contact change. Request a new OTP." });
+        }
+        if (user.contactChangeOtpExpiry < Date.now()) {
+            return res.status(400).json({ message: "OTP expired. Request a new one." });
+        }
+
+        const otpMatches = await bcrypt.compare(String(otp), user.contactChangeOtp);
+        if (!otpMatches) {
+            const attempts = (user.contactChangeOtpAttempts || 0) + 1;
+            const update = { contactChangeOtpAttempts: attempts };
+            if (attempts >= 5) {
+                update.contactChangeOtpBlockedUntil = Date.now() + 24 * 60 * 60 * 1000;
+                update.contactChangeOtp = null;
+                update.contactChangeOtpExpiry = null;
+                update.pendingContactEmail = null;
+                update.pendingContactPhone = null;
+            }
+            await User.findByIdAndUpdate(user._id, update);
+            return res.status(400).json({
+                message: attempts >= 5
+                    ? "Too many failed attempts. Please try again later."
+                    : `Invalid OTP. ${5 - attempts} attempt(s) left.`
+            });
+        }
+
+        const conflict = await User.findOne({
+            $or: [{ email: user.pendingContactEmail }, ...(user.pendingContactPhone ? [{ phone: user.pendingContactPhone }] : [])],
+            _id: { $ne: user._id }
+        });
+        if (conflict) return res.status(409).json({ message: "Email or phone number is already in use" });
+
+        const result = await User.updateOne(
+            {
+                _id: user._id,
+                contactChangeOtp: user.contactChangeOtp,
+                contactChangeOtpExpiry: { $gt: Date.now() }
+            },
+            {
+                $set: { email: user.pendingContactEmail, phone: user.pendingContactPhone },
+                $unset: {
+                    contactChangeOtp: 1,
+                    contactChangeOtpExpiry: 1,
+                    contactChangeOtpAttempts: 1,
+                    contactChangeOtpBlockedUntil: 1,
+                    pendingContactEmail: 1,
+                    pendingContactPhone: 1
+                }
+            }
+        );
+        if (!result.modifiedCount) return res.status(400).json({ message: "OTP expired. Request a new one." });
+
+        return res.status(200).json({
+            message: "Contact details updated successfully",
+            profile: { email: user.pendingContactEmail, phone: user.pendingContactPhone }
+        });
+    } catch (error) {
+        console.error("Contact change OTP verification error:", error);
+        return res.status(500).json({ message: "Failed to verify OTP" });
+    }
+};
+
+exports.changePassword = async (req, res) => {
+    const { currentPassword, newPassword, confirmPassword } = req.body || {};
+    if (!currentPassword || !newPassword || !confirmPassword) {
+        return res.status(400).json({ message: "All password fields are required" });
+    }
+    if (newPassword !== confirmPassword) {
+        return res.status(400).json({ message: "New passwords do not match" });
+    }
+    if (newPassword.length < 6 || !/[A-Z]/.test(newPassword) || !/[0-9]/.test(newPassword)) {
+        return res.status(400).json({ message: "Password must be at least 6 characters and include an uppercase letter and a number" });
+    }
+
+    try {
+        const user = await User.findById(req.payload.id);
+        if (!user) return res.status(404).json({ message: "User not found" });
+        if (!user.password || !(await bcrypt.compare(currentPassword, user.password))) {
+            return res.status(400).json({ message: "Current password is incorrect" });
+        }
+
+        user.password = await bcrypt.hash(newPassword, 10);
+        await user.save();
+        return res.status(200).json({ message: "Password changed successfully" });
+    } catch (error) {
+        console.error("Password change error:", error);
+        return res.status(500).json({ message: "Failed to change password" });
+    }
+};
+
 exports.updateUser = async (req, res) => {
     const userId = req.params.id
     const { id } = req.payload
-    const { username, email, phone } = req.body
+    const { username } = req.body
 
     try {
         if (id !== userId) {
@@ -370,21 +692,11 @@ exports.updateUser = async (req, res) => {
         if (!currentUser.isVerified) {
             return res.status(400).json({ message: "Please verify email first" });
         }
-        const conflict = await User.findOne({
-            $or: [{ email }, { phone }],
-            _id: { $ne: userId }
-        });
-
-        if (conflict) {
-            if (conflict.email === email) {
-                return res.status(400).json({ message: "Email already in use" });
-            }
-            if (conflict.phone === phone) {
-                return res.status(400).json({ message: "Phone number already in use" });
-            }
+        if (req.body.email !== undefined || req.body.phone !== undefined) {
+            return res.status(400).json({ message: "Use the verified contact change flow to update email or phone" });
         }
 
-        await User.findByIdAndUpdate(userId, { username, email, phone }, { new: true });
+        await User.findByIdAndUpdate(userId, { username }, { new: true });
         res.status(200).json({ message: "User updated successfully" });
     } catch (error) {
         res.status(500).json({ message: "Internal server error", error })
@@ -397,7 +709,7 @@ exports.updateUser = async (req, res) => {
 exports.User = async (req, res) => {
     const { email } = req.body
     try {
-        const user = await User.findOne({ email })
+        const user = await User.findOne({ email }).select('email isVerified')
         if (user && user.isVerified) {
             res.status(200).json({ message: "User found", user })
 

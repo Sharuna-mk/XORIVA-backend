@@ -20,11 +20,17 @@ router.post('/register', userController.registerUser);
 router.post('/login-password', userController.loginUsingPassword);
 router.post('/generate-otp', rateLimiter, userController.otpGenerate);
 router.post('/login-otp', userController.loginUsingOtp);
+router.post('/password-reset/send-otp', rateLimiter, userController.sendPasswordResetOTP);
+router.post('/password-reset/verify-otp', userController.verifyPasswordResetOTP);
+router.post('/password-reset', userController.resetPassword);
 router.post('/google-login', userController.googleLogin);
 router.post('/user-list', userController.User);
 router.put('/user/:id', jwtMiddleware, userController.updateUser);
 router.delete('/user/:id', jwtMiddleware, userController.deleteUser);
 router.get('/profile', jwtMiddleware, userController.getProfile);
+router.post('/profile/contact/send-otp', jwtMiddleware, rateLimiter, userController.sendContactChangeOTP);
+router.post('/profile/contact/verify-otp', jwtMiddleware, userController.verifyContactChangeOTP);
+router.post('/profile/change-password', jwtMiddleware, userController.changePassword);
 router.put('/profile/payout-account', jwtMiddleware, userController.updatePayoutAccount);
 
 
@@ -39,6 +45,8 @@ router.get('/thrift/products', optionalJwtMiddleware, productController.getThrif
 router.post('/thrift/listings', jwtMiddleware, productController.createThriftListing);
 router.post('/thrift/drafts', jwtMiddleware, productController.createThriftDraft);
 router.get('/thrift/my-listings', jwtMiddleware, productController.getMyThriftListings);
+router.patch('/thrift/my-listings/:id/publish', jwtMiddleware, productController.publishMyThriftListing);
+router.patch('/thrift/my-listings/:id', jwtMiddleware, productController.updateMyThriftListing);
 router.patch('/thrift/listings/:id/withdraw', jwtMiddleware, productController.withdrawThriftListing);
 router.post('/product/:id/reviews', jwtMiddleware, productController.createReview);
 
@@ -68,6 +76,7 @@ router.get('/orders', jwtMiddleware, orderController.allOrder);
 router.patch('/orders/:id/cancel', jwtMiddleware, orderController.cancelOrder);
 router.post('/orders/:id/return', jwtMiddleware, orderController.requestReturn);
 router.get('/seller/orders', jwtMiddleware, orderController.sellerOrders);
+router.patch('/seller/orders/:id/status', jwtMiddleware, orderController.updateSellerOrderStatus);
 
 // Chat
 router.post('/chat', chatController.chatController);

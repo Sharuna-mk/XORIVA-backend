@@ -50,6 +50,50 @@ const userSchema = mongoose.Schema({
     loginOtpExpiry: {
         type: Date
     },
+    passwordResetOtp: {
+        type: String
+    },
+    passwordResetOtpExpiry: {
+        type: Date
+    },
+    passwordResetOtpLastSentAt: {
+        type: Date
+    },
+    passwordResetOtpAttempts: {
+        type: Number,
+        default: 0
+    },
+    passwordResetOtpBlockedUntil: {
+        type: Date
+    },
+    passwordResetToken: {
+        type: String
+    },
+    passwordResetTokenExpiry: {
+        type: Date
+    },
+    contactChangeOtp: {
+        type: String
+    },
+    contactChangeOtpExpiry: {
+        type: Date
+    },
+    contactChangeOtpLastSentAt: {
+        type: Date
+    },
+    contactChangeOtpAttempts: {
+        type: Number,
+        default: 0
+    },
+    contactChangeOtpBlockedUntil: {
+        type: Date
+    },
+    pendingContactEmail: {
+        type: String
+    },
+    pendingContactPhone: {
+        type: String
+    },
     otpLastSentAt: {
         type: Date
     },
