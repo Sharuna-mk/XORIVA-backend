@@ -7,7 +7,7 @@ const Cart = require("../Model/cartModel");
 exports.createOrder = async (req, res) => {
   try {
     const userId = req.payload.id;
-    const { addressId, paymentMethod = "online" } = req.body;
+    const { addressId, paymentMethod = "online", couponCode } = req.body;
 
     const cart = await Cart.findOne({ user: userId }).populate("items.product");
 
@@ -58,13 +58,41 @@ exports.createOrder = async (req, res) => {
     const platformFeePercent = Number(process.env.PLATFORM_FEE_PERCENT || 10);
     const platformFee = Math.round((thriftSubtotal * platformFeePercent) / 100);
     const codCharge = paymentMethod === "cod" ? 10 : 0;
-    const totalAmount = subtotal + platformFee + codCharge;
+
+    let discount = 0;
+    let validCouponCode = "";
+    if (couponCode && typeof couponCode === "string") {
+      const code = couponCode.trim().toUpperCase();
+      const COUPONS = {
+        XORIVA10: { type: "percent", val: 0.1 },
+        FIRST15: { type: "percent", val: 0.15 },
+        SAVE10: { type: "percent", val: 0.1 },
+        WINTER20: { type: "percent", val: 0.2, minOrder: 699 },
+        FLAT100: { type: "flat", val: 100, minOrder: 500 },
+        SAVE50: { type: "flat", val: 50, minOrder: 299 },
+        THRIFT50: { type: "flat", val: 50 },
+      };
+      const c = COUPONS[code];
+      if (c && (!c.minOrder || subtotal >= c.minOrder)) {
+        validCouponCode = code;
+        if (c.type === "percent") {
+          const rate = c.val <= 1 ? c.val : c.val / 100;
+          discount = Math.round(subtotal * rate);
+        } else {
+          discount = Math.min(subtotal, c.val);
+        }
+      }
+    }
+
+    const totalAmount = Math.max(0, subtotal - discount) + platformFee + codCharge;
     const order = await Order.create({
       userId,
       items: orderItems,
       shippingAddress: address,
       totalAmount,
       subtotal,
+      discount,
+      couponCode: validCouponCode,
       thriftSubtotal,
       platformFeePercent,
       platformFee,
@@ -72,7 +100,7 @@ exports.createOrder = async (req, res) => {
       payoutStatus: thriftSubtotal > 0 ? "pending" : "not_applicable",
       paymentMethod: paymentMethod === "cod" ? "cod" : "online",
       paymentStatus: "pending",
-      orderStatus: "created"
+      orderStatus: "placed"
     });
 
     if (paymentMethod === "cod") {
@@ -184,6 +212,7 @@ exports.sellerOrders = async (req, res) => {
     const sellerProductIds = sellerProducts.map((product) => product._id);
     const orders = await Order.find({ "items.productId": { $in: sellerProductIds } })
       .populate("items.productId")
+      .populate("userId", "username email phone")
       .sort({ createdAt: -1 });
 
     const sellerOrders = orders.map((order) => ({
@@ -198,11 +227,87 @@ exports.sellerOrders = async (req, res) => {
   }
 };
 
+exports.updateSellerOrderStatus = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { orderStatus, courierPartner, trackingNumber, trackingUrl, sellerNotes, cancellationReason } = req.body;
+
+    const order = await Order.findById(id).populate("items.productId");
+    if (!order) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    const isSeller = order.items.some(
+      (item) => item.productId && item.productId.sellerId && item.productId.sellerId.toString() === req.payload.id
+    );
+    if (!isSeller) {
+      return res.status(403).json({ message: "You are not authorized to update this order" });
+    }
+
+    if (courierPartner !== undefined) order.courierPartner = courierPartner.trim();
+    if (trackingNumber !== undefined) order.trackingNumber = trackingNumber.trim();
+    if (trackingUrl !== undefined) order.trackingUrl = trackingUrl.trim();
+    if (sellerNotes !== undefined) order.sellerNotes = sellerNotes.trim();
+
+    if (orderStatus) {
+      const validStatuses = ["placed", "created", "confirmed", "shipped", "out_for_delivery", "delivered", "cancelled"];
+      if (!validStatuses.includes(orderStatus)) {
+        return res.status(400).json({ message: "Invalid order status" });
+      }
+
+      if (order.orderStatus === "cancelled" || order.orderStatus === "returned") {
+        return res.status(400).json({ message: `Cannot update order because it is already ${order.orderStatus}` });
+      }
+
+      if (orderStatus === "confirmed") {
+        order.orderStatus = "confirmed";
+        if (!order.confirmedAt) order.confirmedAt = new Date();
+      } else if (orderStatus === "shipped") {
+        order.orderStatus = "shipped";
+        if (!order.shippedAt) order.shippedAt = new Date();
+      } else if (orderStatus === "out_for_delivery") {
+        order.orderStatus = "out_for_delivery";
+      } else if (orderStatus === "delivered") {
+        order.orderStatus = "delivered";
+        if (!order.deliveredAt) order.deliveredAt = new Date();
+        if (order.payoutStatus === "pending") {
+          order.payoutStatus = "eligible";
+        }
+      } else if (orderStatus === "cancelled") {
+        order.orderStatus = "cancelled";
+        order.cancelledAt = new Date();
+        if (cancellationReason) {
+          order.sellerNotes = (order.sellerNotes ? `${order.sellerNotes} | ` : "") + `Cancelled by seller: ${cancellationReason}`;
+        }
+        order.payoutStatus = "not_applicable";
+      } else {
+        order.orderStatus = orderStatus;
+      }
+    }
+
+    await order.save();
+
+    const updatedOrder = await Order.findById(id)
+      .populate("items.productId")
+      .populate("userId", "username email phone");
+
+    const sellerOrder = {
+      ...updatedOrder.toObject(),
+      items: updatedOrder.items.filter((item) => item.productId?.sellerId?.toString() === req.payload.id),
+    };
+
+    return res.status(200).json({ message: "Order status updated successfully", order: sellerOrder });
+  } catch (error) {
+    console.error("UPDATE SELLER ORDER ERROR:", error);
+    return res.status(500).json({ message: "Failed to update order status", error: error.message });
+  }
+};
+
 exports.cancelOrder = async (req, res) => {
   try {
     const order = await Order.findOne({ _id: req.params.id, userId: req.payload.id });
     if (!order) return res.status(404).json({ message: "Order not found" });
-    if (!["created", "confirmed"].includes(order.orderStatus)) {
+    if (!["placed", "created", "confirmed"].includes(order.orderStatus)) {
       return res.status(400).json({ message: "This order can no longer be cancelled" });
     }
     order.orderStatus = "cancelled";

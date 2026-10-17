@@ -119,12 +119,121 @@ exports.getMyThriftListings = async (req, res) => {
   }
 };
 
+exports.updateMyThriftListing = async (req, res) => {
+  try {
+    const product = await Product.findOne({
+      _id: req.params.id,
+      sellerId: getSellerId(req),
+      listingType: "thrift",
+    });
+    if (!product) return res.status(404).json({ message: "Listing not found" });
+    if (["sold", "withdrawn"].includes(product.listingStatus)) {
+      return res.status(400).json({ message: "Sold or withdrawn listings can no longer be edited" });
+    }
+
+    const activeOrder = await Order.exists({
+      "items.productId": product._id,
+      orderStatus: { $nin: ["cancelled", "returned"] },
+    });
+    if (activeOrder) {
+      return res.status(409).json({ message: "This listing has an active order. Complete or resolve it before editing." });
+    }
+
+    const {
+      title, brand, description, price, quantity, categories, itemCategory,
+      color, material, fit, pattern, measurements, size, condition, era, images,
+    } = req.body || {};
+    const publishing = req.body?.publish === true;
+    const nextTitle = typeof title === "string" ? title.trim() : product.title;
+    const nextDescription = typeof description === "string" ? description.trim() : product.description || "";
+    const nextPrice = price === undefined ? product.final_price_inr : Number(price);
+    const nextQuantity = quantity === undefined ? product.stock : Number(quantity);
+    const nextCategories = categories === undefined ? product.tags : categories;
+    const imagesUpdated = images !== undefined;
+    const nextImages = images === undefined ? product.images : images;
+
+    if (!nextTitle || !Number.isFinite(nextPrice) || nextPrice < 0 || !Number.isInteger(nextQuantity) || nextQuantity < 0) {
+      return res.status(400).json({ message: "Enter a title, valid price, and whole-number quantity" });
+    }
+    if (!Array.isArray(nextCategories) || !Array.isArray(nextImages) || nextImages.length > 7) {
+      return res.status(400).json({ message: "Categories or images are invalid" });
+    }
+    if (nextImages.some((image) => typeof image !== "string" || (!image.startsWith("data:image/") && !/^https:\/\//.test(image)) || (imagesUpdated && image.length > 2_500_000 && !product.images.includes(image)))) {
+      return res.status(400).json({ message: "Each listing image must be a valid image smaller than 2MB" });
+    }
+    if (condition && !["New", "Like New", "Good", "Used"].includes(condition)) {
+      return res.status(400).json({ message: "Select a valid item condition" });
+    }
+    if (publishing) {
+      if (!["draft", "rejected"].includes(product.listingStatus)) {
+        return res.status(400).json({ message: "Only drafts or rejected listings can be published from here" });
+      }
+      if (!nextTitle || !nextDescription || !condition || nextPrice <= 0 || nextQuantity < 1 || !nextCategories.length || !nextImages.length) {
+        return res.status(400).json({ message: "Add a title, description, category, condition, price, quantity, and at least one photo before publishing" });
+      }
+      const seller = await User.findById(getSellerId(req)).select("payoutAccount");
+      if (seller?.payoutAccount?.status !== "verified") {
+        return res.status(400).json({ message: "Your payout account must be verified before publishing" });
+      }
+    }
+
+    product.title = nextTitle;
+    product.brand = typeof brand === "string" ? brand.trim() : product.brand;
+    product.description = nextDescription;
+    product.final_price_inr = nextPrice;
+    product.original_price_inr = nextPrice;
+    product.price = nextPrice;
+    product.stock = nextQuantity;
+    product.tags = nextCategories;
+    product.category = nextCategories[0] || product.category;
+    product.itemCategory = itemCategory ?? product.itemCategory;
+    product.color = color ?? product.color;
+    product.material = material ?? product.material;
+    product.fit = fit ?? product.fit;
+    product.pattern = pattern ?? product.pattern;
+    product.measurements = measurements ?? product.measurements;
+    if (condition !== undefined) product.condition = condition || undefined;
+    product.era = era ?? product.era;
+    if (size !== undefined) {
+      product.sizes = size ? [String(size).trim()] : [];
+      product.sizeStock = size ? { [String(size).trim()]: nextQuantity } : {};
+    } else if (product.sizes?.length) {
+      product.sizeStock = Object.fromEntries(product.sizes.map((item) => [item, nextQuantity]));
+    }
+    product.images = nextImages;
+    product.thumbnail = nextImages[0];
+    product.availabilityStatus = nextQuantity > 0 ? "In Stock" : "Out of Stock";
+    if (publishing) product.listingStatus = "approved";
+
+    await product.save();
+    return res.status(200).json({ message: "Listing updated", product });
+  } catch (error) {
+    console.error("updateMyThriftListing error:", error);
+    return res.status(500).json({ message: "Failed to update listing" });
+  }
+};
+
+exports.publishMyThriftListing = async (req, res) => {
+  req.body = { ...(req.body || {}), publish: true };
+  return exports.updateMyThriftListing(req, res);
+};
+
 exports.withdrawThriftListing = async (req, res) => {
   try {
-    const product = await Product.findOneAndUpdate(
-      { _id: req.params.id, sellerId: getSellerId(req), listingType: "thrift", listingStatus: { $in: ["approved", "pending_review"] } },
-      { listingStatus: "withdrawn", stock: 0, availabilityStatus: "Out of Stock" }, { new: true }
-    );
+    const listingQuery = {
+      _id: req.params.id,
+      sellerId: getSellerId(req),
+      listingType: "thrift",
+      listingStatus: { $in: ["approved", "pending_review"] },
+    };
+    const listing = await Product.findOne(listingQuery);
+    if (!listing) return res.status(404).json({ message: "Listing not found" });
+    const activeOrder = await Order.exists({
+      "items.productId": listing._id,
+      orderStatus: { $nin: ["cancelled", "returned"] },
+    });
+    if (activeOrder) return res.status(409).json({ message: "This listing has an active order and cannot be withdrawn yet" });
+    const product = await Product.findOneAndUpdate(listingQuery, { listingStatus: "withdrawn", stock: 0, availabilityStatus: "Out of Stock" }, { new: true });
     if (!product) return res.status(404).json({ message: "Listing not found" });
     return res.status(200).json({ message: "Listing withdrawn", product });
   } catch (error) {
